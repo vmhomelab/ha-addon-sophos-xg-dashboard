@@ -69,3 +69,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - Keep `verify_ssl: true` where possible; `false` is common in homelabs with self-signed certs.
 - Keep the Sophos XML API allowlist narrow.
 - Treat this add-on as management-plane software.
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=vmhomelab%2Fha-addon-sophos-xg-dashboard&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=vmhomelab/ha-addon-sophos-xg-dashboard&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=vmhomelab/ha-addon-sophos-xg-dashboard&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=vmhomelab/ha-addon-sophos-xg-dashboard&type=date&legend=top-left" />
+ </picture>
+</a>
