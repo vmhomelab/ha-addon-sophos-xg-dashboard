@@ -11,7 +11,7 @@ class Settings(BaseModel):
     verify_ssl: bool = Field(default=False)
     username: str = Field(default="")
     password: str = Field(default="")
-    request_timeout: int = Field(default=15, ge=3, le=120)
+    request_timeout: int = Field(default=8, ge=3, le=120)
     refresh_interval: int = Field(default=60, ge=10, le=3600)
 
 
@@ -25,6 +25,6 @@ def load_settings() -> Settings:
         verify_ssl=os.getenv("SOPHOS_VERIFY_SSL", "false").lower() in {"1", "true", "yes"},
         username=os.getenv("SOPHOS_USERNAME", ""),
         password=os.getenv("SOPHOS_PASSWORD", ""),
-        request_timeout=int(os.getenv("SOPHOS_REQUEST_TIMEOUT", "15")),
+        request_timeout=int(os.getenv("SOPHOS_REQUEST_TIMEOUT", "8")),
         refresh_interval=int(os.getenv("SOPHOS_REFRESH_INTERVAL", "60")),
     )

@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "sophos-xg-dashboard"))
 import httpx
 import pytest
 
-from app.sophos_api import SophosClient, build_dashboard_summary, parse_firewall_rules, parse_nat_rules
+from app.sophos_api import SophosClient, build_dashboard_summary, parse_firewall_rules, parse_nat_rules, sanitize_error
 
 
 FIREWALL_XML = """
@@ -112,6 +112,10 @@ async def test_sophos_client_reports_authentication_failure(monkeypatch):
 
     with pytest.raises(RuntimeError, match="Sophos API login failed: Authentication Failure"):
         await client.get_firewall_rules_raw()
+
+
+def test_sanitize_error_falls_back_to_exception_type_for_empty_messages():
+    assert sanitize_error(TimeoutError()) == "TimeoutError"
 
 
 def test_frontend_contains_home_assistant_style_stat_cards_and_filterable_tables():

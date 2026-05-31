@@ -248,5 +248,7 @@ def build_dashboard_summary(
 
 def sanitize_error(exc: Exception) -> str:
     message = str(exc)
+    if not message:
+        message = exc.__class__.__name__
     message = re.sub(r"<Password>.*?</Password>", "<Password>***</Password>", message, flags=re.I | re.S)
     return message

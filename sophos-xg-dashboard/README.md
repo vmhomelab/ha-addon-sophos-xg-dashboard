@@ -17,7 +17,7 @@ sophos_host: https://192.0.2.10:4444
 verify_ssl: false
 username: api-user
 password: your-secret-password
-request_timeout: 15
+request_timeout: 8
 refresh_interval: 60
 ```
 

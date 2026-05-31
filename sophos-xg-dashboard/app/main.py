@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import FastAPI, Request
@@ -77,23 +78,29 @@ async def nat_rules() -> JSONResponse:
 @app.get("/api/summary")
 async def summary() -> JSONResponse:
     result: dict[str, object] = {"ok": True, "firewall_rules": None, "nat_rules": None, "dashboard": None, "errors": []}
-    try:
-        fw_raw = await client().get_firewall_rules_raw()
-        result["firewall_rules"] = parse_firewall_rules(fw_raw)
-    except Exception as exc:  # noqa: BLE001
-        error = sanitize_error(exc)
-        result["ok"] = False
-        result["errors"].append({"source": "firewall_rules", "error": error})
-        logger.warning("Sophos summary firewall rule request failed: %s", error)
+    sophos_client = client()
 
-    try:
-        nat_raw = await client().get_nat_rules_raw()
-        result["nat_rules"] = parse_nat_rules(nat_raw)
-    except Exception as exc:  # noqa: BLE001
-        error = sanitize_error(exc)
-        result["ok"] = False
-        result["errors"].append({"source": "nat_rules", "error": error})
-        logger.warning("Sophos summary NAT rule request failed: %s", error)
+    async def load_firewall_rules() -> None:
+        try:
+            fw_raw = await sophos_client.get_firewall_rules_raw()
+            result["firewall_rules"] = parse_firewall_rules(fw_raw)
+        except Exception as exc:  # noqa: BLE001
+            error = sanitize_error(exc)
+            result["ok"] = False
+            result["errors"].append({"source": "firewall_rules", "error": error})
+            logger.warning("Sophos summary firewall rule request failed: %s", error)
+
+    async def load_nat_rules() -> None:
+        try:
+            nat_raw = await sophos_client.get_nat_rules_raw()
+            result["nat_rules"] = parse_nat_rules(nat_raw)
+        except Exception as exc:  # noqa: BLE001
+            error = sanitize_error(exc)
+            result["ok"] = False
+            result["errors"].append({"source": "nat_rules", "error": error})
+            logger.warning("Sophos summary NAT rule request failed: %s", error)
+
+    await asyncio.gather(load_firewall_rules(), load_nat_rules())
 
     result["dashboard"] = build_dashboard_summary(
         result.get("firewall_rules") if isinstance(result.get("firewall_rules"), dict) else None,

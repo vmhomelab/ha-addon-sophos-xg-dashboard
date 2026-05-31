@@ -199,14 +199,31 @@
         { key: 'services', label: 'Services' },
       ];
 
+      let currentRefresh = null;
+
       async function loadSummary() {
+        if (currentRefresh) currentRefresh.abort();
+        const controller = new AbortController();
+        currentRefresh = controller;
+        const timeout = window.setTimeout(() => controller.abort(), 12000);
         const status = document.getElementById('api-status');
         const errors = document.getElementById('errors');
         const errorOutput = document.getElementById('error-output');
+        const refreshButton = document.getElementById('refresh');
         status.textContent = 'Loading';
+        status.className = '';
+        refreshButton.disabled = true;
+        refreshButton.textContent = 'Refreshing…';
+        document.getElementById('last-updated').textContent = `Refreshing ${new Date().toLocaleTimeString()}`;
         try {
-          const response = await fetch('./api/summary', { cache: 'no-store' });
-          const data = await response.json();
+          const response = await fetch(`./api/summary?_=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
+          const body = await response.text();
+          let data;
+          try {
+            data = JSON.parse(body);
+          } catch (parseError) {
+            throw new Error(`Dashboard API returned HTTP ${response.status}, but not JSON: ${body.slice(0, 300)}`);
+          }
           const cards = data.dashboard?.cards ?? {};
           status.textContent = data.ok ? 'OK' : 'Error';
           status.className = data.ok ? 'status-ok' : 'status-error';
@@ -232,10 +249,19 @@
             errorOutput.textContent = '';
           }
         } catch (err) {
+          const message = err.name === 'AbortError'
+            ? 'Dashboard API request timed out after 12 seconds. Check add-on logs for the SFOS request error.'
+            : String(err);
           status.textContent = 'Error';
           status.className = 'status-error';
           errors.hidden = false;
-          errorOutput.textContent = String(err);
+          errorOutput.textContent = message;
+          document.getElementById('last-updated').textContent = `Failed ${new Date().toLocaleTimeString()}`;
+        } finally {
+          window.clearTimeout(timeout);
+          if (currentRefresh === controller) currentRefresh = null;
+          refreshButton.disabled = false;
+          refreshButton.textContent = 'Refresh';
         }
       }
 
