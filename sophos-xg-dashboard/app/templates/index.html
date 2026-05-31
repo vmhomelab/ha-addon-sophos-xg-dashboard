@@ -202,10 +202,10 @@
       let currentRefresh = null;
 
       async function loadSummary() {
-        if (currentRefresh) currentRefresh.abort();
+        if (currentRefresh) return;
         const controller = new AbortController();
         currentRefresh = controller;
-        const timeout = window.setTimeout(() => controller.abort(), 12000);
+        const timeout = window.setTimeout(() => controller.abort(), 45000);
         const status = document.getElementById('api-status');
         const errors = document.getElementById('errors');
         const errorOutput = document.getElementById('error-output');
@@ -250,7 +250,7 @@
           }
         } catch (err) {
           const message = err.name === 'AbortError'
-            ? 'Dashboard API request timed out after 12 seconds. Check add-on logs for the SFOS request error.'
+            ? 'Dashboard API request timed out after 45 seconds. Check add-on logs for the SFOS request error.'
             : String(err);
           status.textContent = 'Error';
           status.className = 'status-error';
