@@ -13,7 +13,7 @@ A Home Assistant add-on that displays Sophos Firewall / SFOS XML API information
 ## Configuration
 
 ```yaml
-sophos_host: https://10.17.1.1:4444
+sophos_host: https://192.0.2.10:4444
 verify_ssl: false
 username: api-user
 password: your-secret-password

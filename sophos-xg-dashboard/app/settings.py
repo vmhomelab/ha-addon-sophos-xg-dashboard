@@ -7,7 +7,7 @@ OPTIONS_PATH = Path("/data/options.json")
 
 
 class Settings(BaseModel):
-    sophos_host: str = Field(default="https://10.17.1.1:4444")
+    sophos_host: str = Field(default="https://192.0.2.10:4444")
     verify_ssl: bool = Field(default=False)
     username: str = Field(default="")
     password: str = Field(default="")
@@ -21,7 +21,7 @@ def load_settings() -> Settings:
 
     # Local development fallback only. Do not use this for HA add-on secrets.
     return Settings(
-        sophos_host=os.getenv("SOPHOS_HOST", "https://10.17.1.1:4444"),
+        sophos_host=os.getenv("SOPHOS_HOST", "https://192.0.2.10:4444"),
         verify_ssl=os.getenv("SOPHOS_VERIFY_SSL", "false").lower() in {"1", "true", "yes"},
         username=os.getenv("SOPHOS_USERNAME", ""),
         password=os.getenv("SOPHOS_PASSWORD", ""),

@@ -1,6 +1,6 @@
 # Home Assistant Add-on: Sophos XG/SFOS Dashboard
 
-Private Home Assistant add-on repository for a Sophos XG / Sophos Firewall (SFOS) dashboard.
+Home Assistant add-on repository for a Sophos XG / Sophos Firewall (SFOS) dashboard.
 
 The add-on talks to the local Sophos XML API and exposes a Home Assistant Ingress web UI with:
 
@@ -29,13 +29,13 @@ On the Sophos firewall:
 4. Use the firewall management URL, for example:
 
 ```text
-https://10.17.1.1:4444
+https://192.0.2.10:4444
 ```
 
 ## Add-on options
 
 ```yaml
-sophos_host: https://10.17.1.1:4444
+sophos_host: https://192.0.2.10:4444
 verify_ssl: false
 username: api-user
 password: your-secret-password
@@ -62,7 +62,7 @@ cd sophos-xg-dashboard
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-export SOPHOS_HOST="https://10.17.1.1:4444"
+export SOPHOS_HOST="https://192.0.2.10:4444"
 export SOPHOS_USERNAME="api-user"
 export SOPHOS_PASSWORD="secret"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
