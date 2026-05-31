@@ -1,0 +1,29 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r sophos-xg-dashboard/requirements.txt pyyaml
+      - name: Validate YAML and Python syntax
+        run: |
+          python - <<'PY'
+          import compileall
+          import yaml
+          from pathlib import Path
+          for file in ['repository.yaml', 'sophos-xg-dashboard/config.yaml', 'sophos-xg-dashboard/build.yaml']:
+              with open(file, 'r', encoding='utf-8') as fh:
+                  yaml.safe_load(fh)
+          assert compileall.compile_dir('sophos-xg-dashboard/app', quiet=1)
+          PY

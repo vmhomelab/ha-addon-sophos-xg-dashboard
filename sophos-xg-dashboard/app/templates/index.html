@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="./static/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">Home Assistant Add-on</p>
+          <h1>Sophos XG/SFOS Dashboard</h1>
+          <p class="muted">Target: <code>{{ sophos_host }}</code></p>
+        </div>
+        <button id="refresh">Refresh</button>
+      </header>
+
+      <section class="cards">
+        <article class="card">
+          <span class="label">API status</span>
+          <strong id="api-status">Loading</strong>
+        </article>
+        <article class="card">
+          <span class="label">Firewall rules</span>
+          <strong id="fw-count">-</strong>
+        </article>
+        <article class="card">
+          <span class="label">NAT rules</span>
+          <strong id="nat-count">-</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Firewall rules</h2>
+        <div class="table-wrap"><table id="fw-table"></table></div>
+      </section>
+
+      <section class="panel">
+        <h2>NAT rules</h2>
+        <div class="table-wrap"><table id="nat-table"></table></div>
+      </section>
+
+      <section class="panel error" id="errors" hidden>
+        <h2>Diagnostics</h2>
+        <pre id="error-output"></pre>
+      </section>
+    </main>
+
+    <script>
+      const refreshMs = {{ refresh_interval }} * 1000;
+
+      function renderRules(tableId, rows, columns) {
+        const table = document.getElementById(tableId);
+        if (!rows || rows.length === 0) {
+          table.innerHTML = '<tr><td class="muted">No rules returned.</td></tr>';
+          return;
+        }
+        table.innerHTML = `<thead><tr>${columns.map(c => `<th>${c.label}</th>`).join('')}</tr></thead>` +
+          `<tbody>${rows.map(row => `<tr>${columns.map(c => `<td>${Array.isArray(row[c.key]) ? row[c.key].join(', ') : (row[c.key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      }
+
+      async function loadSummary() {
+        const status = document.getElementById('api-status');
+        const errors = document.getElementById('errors');
+        const errorOutput = document.getElementById('error-output');
+        status.textContent = 'Loading';
+        try {
+          const response = await fetch('./api/summary', { cache: 'no-store' });
+          const data = await response.json();
+          status.textContent = data.ok ? 'OK' : 'Error';
+          document.getElementById('fw-count').textContent = data.firewall_rules?.count ?? '-';
+          document.getElementById('nat-count').textContent = data.nat_rules?.count ?? '-';
+          renderRules('fw-table', data.firewall_rules?.rules ?? [], [
+            { key: 'name', label: 'Name' },
+            { key: 'enabled', label: 'Enabled' },
+            { key: 'action', label: 'Action' },
+            { key: 'source_zones', label: 'Source zones' },
+            { key: 'destination_zones', label: 'Destination zones' },
+            { key: 'services', label: 'Services' },
+          ]);
+          renderRules('nat-table', data.nat_rules?.rules ?? [], [
+            { key: 'name', label: 'Name' },
+            { key: 'enabled', label: 'Enabled' },
+            { key: 'original_source', label: 'Original source' },
+            { key: 'original_destination', label: 'Original destination' },
+            { key: 'translated_destination', label: 'Translated destination' },
+          ]);
+          if (data.errors && data.errors.length) {
+            errors.hidden = false;
+            errorOutput.textContent = JSON.stringify(data.errors, null, 2);
+          } else {
+            errors.hidden = true;
+            errorOutput.textContent = '';
+          }
+        } catch (err) {
+          status.textContent = 'Error';
+          errors.hidden = false;
+          errorOutput.textContent = String(err);
+        }
+      }
+
+      document.getElementById('refresh').addEventListener('click', loadSummary);
+      loadSummary();
+      setInterval(loadSummary, refreshMs);
+    </script>
+  </body>
+</html>
