@@ -31,6 +31,16 @@ class SophosClient:
   {payload}
 </Request>"""
 
+    def form_data(self, payload: str) -> dict[str, str]:
+        """Return the form field expected by the Sophos/SFOS XML API.
+
+        SFOS does not process raw XML request bodies on APIController. The XML
+        payload must be sent as the `reqxml` form value; otherwise the firewall
+        may answer HTTP 200 with an empty body, which looks like a parser error
+        in the dashboard.
+        """
+        return {"reqxml": self.wrap(payload)}
+
     async def post_xml(self, payload: str) -> str:
         if not self.username or not self.password:
             raise RuntimeError("Sophos username/password are not configured")
@@ -38,10 +48,12 @@ class SophosClient:
         async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
             response = await client.post(
                 self.api_url,
-                content=self.wrap(payload),
-                headers={"Content-Type": "application/xml"},
+                data=self.form_data(payload),
             )
             response.raise_for_status()
+            if not response.text.strip():
+                raise RuntimeError("Sophos API returned an empty response")
+            validate_api_response(response.text)
             return response.text
 
     async def get_firewall_rules_raw(self) -> str:
@@ -122,6 +134,24 @@ def parse_firewall_rules(xml_text: str) -> dict[str, Any]:
             }
         )
     return {"count": len(rules), "rules": rules}
+
+
+def validate_api_response(xml_text: str) -> None:
+    """Raise a safe diagnostic for explicit SFOS XML API failures."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        raise RuntimeError(f"Sophos API returned invalid XML: {exc}") from exc
+
+    for node in root.iter():
+        if _strip_namespace(node.tag).lower() != "status":
+            continue
+        value = _text(node)
+        if not value:
+            continue
+        lowered = value.lower()
+        if any(marker in lowered for marker in ["failure", "failed", "denied", "unauthori"]):
+            raise RuntimeError(f"Sophos API login failed: {value}")
 
 
 def parse_nat_rules(xml_text: str) -> dict[str, Any]:

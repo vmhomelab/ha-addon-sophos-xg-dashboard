@@ -6,7 +6,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "sophos-xg-dashboard"))
 
-from app.sophos_api import build_dashboard_summary, parse_firewall_rules, parse_nat_rules
+import httpx
+import pytest
+
+from app.sophos_api import SophosClient, build_dashboard_summary, parse_firewall_rules, parse_nat_rules
 
 
 FIREWALL_XML = """
@@ -76,6 +79,39 @@ def test_dashboard_summary_exposes_card_statistics_and_breakdowns():
     assert summary["firewall_action_breakdown"] == {"Accept": 1, "Drop": 1}
     assert summary["firewall_source_zone_breakdown"] == {"LAN": 1, "GUEST": 1}
     assert summary["nat_translation_breakdown"] == {"dnat": 1, "snat": 1, "other": 0}
+
+
+def test_sophos_client_sends_xml_as_reqxml_form_field():
+    client = SophosClient(host="https://192.0.2.10:4444", username="api-user", password="secret")
+
+    data = client.form_data("<Get><FirewallRule></FirewallRule></Get>")
+
+    assert list(data) == ["reqxml"]
+    assert "<Username>api-user</Username>" in data["reqxml"]
+    assert "<Password>secret</Password>" in data["reqxml"]
+    assert "<Get><FirewallRule></FirewallRule></Get>" in data["reqxml"]
+
+
+@pytest.mark.anyio
+async def test_sophos_client_reports_authentication_failure(monkeypatch):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/webconsole/APIController"
+        assert b"reqxml=" in request.content
+        return httpx.Response(
+            200,
+            text='''<?xml version="1.0" encoding="UTF-8"?>
+<Response><Login><status>Authentication Failure</status></Login></Response>''',
+        )
+
+    class MockAsyncClient(httpx.AsyncClient):
+        def __init__(self, *args, **kwargs):
+            super().__init__(transport=httpx.MockTransport(handler), *args, **kwargs)
+
+    monkeypatch.setattr("app.sophos_api.httpx.AsyncClient", MockAsyncClient)
+    client = SophosClient(host="https://192.0.2.10:4444", username="bad", password="bad")
+
+    with pytest.raises(RuntimeError, match="Sophos API login failed: Authentication Failure"):
+        await client.get_firewall_rules_raw()
 
 
 def test_frontend_contains_home_assistant_style_stat_cards_and_filterable_tables():
