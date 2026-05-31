@@ -81,6 +81,34 @@ def test_dashboard_summary_exposes_card_statistics_and_breakdowns():
     assert summary["nat_translation_breakdown"] == {"dnat": 1, "snat": 1, "other": 0}
 
 
+def test_nat_rule_status_uses_rule_level_status_not_nested_object_status():
+    xml = """
+    <Response>
+      <NATRule>
+        <Name>Disabled DNAT</Name>
+        <Status>Disable</Status>
+        <Position>1</Position>
+        <OriginalSource>
+          <Name>Any</Name>
+          <Status>Enable</Status>
+        </OriginalSource>
+        <TranslatedDestination>
+          <Name>mail-server</Name>
+          <Status>Enable</Status>
+        </TranslatedDestination>
+      </NATRule>
+    </Response>
+    """
+
+    nat = parse_nat_rules(xml)
+
+    assert nat["rules"][0]["status"] == "Disable"
+    assert nat["rules"][0]["enabled"] is False
+    summary = build_dashboard_summary(None, nat)
+    assert summary["cards"]["nat_enabled"] == 0
+    assert summary["cards"]["nat_disabled"] == 1
+
+
 def test_sophos_client_sends_xml_as_reqxml_form_field():
     client = SophosClient(host="https://192.0.2.10:4444", username="api-user", password="secret")
 

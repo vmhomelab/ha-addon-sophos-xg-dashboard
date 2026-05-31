@@ -84,6 +84,24 @@ def _find_text_any(node: ET.Element, names: list[str]) -> str | None:
     return None
 
 
+def _find_child_text_any(node: ET.Element, names: list[str]) -> str | None:
+    """Find a scalar value on the rule node itself, not nested objects.
+
+    Sophos XML API responses can contain nested objects below a FirewallRule or
+    NATRule. Those nested objects may also have fields like `Status` or `Name`.
+    Rule-level state must therefore prefer direct children, otherwise a disabled
+    NAT rule can be shown as enabled because a nested network/service object has
+    its own enabled status.
+    """
+    wanted = {n.lower() for n in names}
+    for child in list(node):
+        if _strip_namespace(child.tag).lower() in wanted:
+            value = _text(child)
+            if value is not None:
+                return value
+    return None
+
+
 def _list_texts(node: ET.Element, container_names: list[str], item_names: list[str]) -> list[str]:
     containers = {n.lower() for n in container_names}
     items = {n.lower() for n in item_names}
@@ -116,20 +134,21 @@ def parse_firewall_rules(xml_text: str) -> dict[str, Any]:
     for node in root.iter():
         if _strip_namespace(node.tag) != "FirewallRule":
             continue
-        name = _find_text_any(node, ["Name", "RuleName"])
+        name = _find_child_text_any(node, ["Name", "RuleName"]) or _find_text_any(node, ["Name", "RuleName"])
         if not name:
             continue
+        status = _find_child_text_any(node, ["Status", "Enable", "Enabled"])
         rules.append(
             {
                 "name": name,
-                "status": _find_text_any(node, ["Status", "Enable"]),
-                "enabled": _enabled(_find_text_any(node, ["Status", "Enable"])),
-                "action": _find_text_any(node, ["Action"]),
-                "position": _find_text_any(node, ["Position"]),
+                "status": status,
+                "enabled": _enabled(status),
+                "action": _find_child_text_any(node, ["Action"]),
+                "position": _find_child_text_any(node, ["Position"]),
                 "source_zones": _list_texts(node, ["SourceZones", "SourceZone"], ["Zone", "Name"]),
                 "destination_zones": _list_texts(node, ["DestinationZones", "DestinationZone"], ["Zone", "Name"]),
                 "services": _list_texts(node, ["Services", "ServiceList"], ["Service", "Name"]),
-                "log_traffic": _find_text_any(node, ["LogTraffic"]),
+                "log_traffic": _find_child_text_any(node, ["LogTraffic"]),
                 "raw_type": _strip_namespace(node.tag),
             }
         )
@@ -160,15 +179,16 @@ def parse_nat_rules(xml_text: str) -> dict[str, Any]:
     for node in root.iter():
         if _strip_namespace(node.tag) != "NATRule":
             continue
-        name = _find_text_any(node, ["Name", "RuleName"])
+        name = _find_child_text_any(node, ["Name", "RuleName"]) or _find_text_any(node, ["Name", "RuleName"])
         if not name:
             continue
+        status = _find_child_text_any(node, ["Status", "Enable", "Enabled"])
         rules.append(
             {
                 "name": name,
-                "status": _find_text_any(node, ["Status", "Enable"]),
-                "enabled": _enabled(_find_text_any(node, ["Status", "Enable"])),
-                "position": _find_text_any(node, ["Position"]),
+                "status": status,
+                "enabled": _enabled(status),
+                "position": _find_child_text_any(node, ["Position"]),
                 "original_source": _find_text_any(node, ["OriginalSource", "OriginalSourceNetwork"]),
                 "translated_source": _find_text_any(node, ["TranslatedSource", "TranslatedSourceNetwork"]),
                 "original_destination": _find_text_any(node, ["OriginalDestination", "OriginalDestinationNetwork"]),
