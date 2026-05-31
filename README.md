@@ -2,6 +2,8 @@
 
 Home Assistant add-on repository for a Sophos XG / Sophos Firewall (SFOS) dashboard.
 
+<img width="1383" height="1339" alt="grafik" src="https://github.com/user-attachments/assets/a3e6aaa5-f7b8-4b00-9e27-7bd72dedcf3a" />
+
 The add-on talks to the local Sophos XML API and exposes a Home Assistant Ingress web UI with:
 
 - firewall/API connectivity status
