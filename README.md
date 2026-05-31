@@ -4,6 +4,7 @@ Home Assistant add-on repository for a Sophos XG / Sophos Firewall (SFOS) dashbo
 
 <img width="1383" height="1339" alt="grafik" src="https://github.com/user-attachments/assets/a3e6aaa5-f7b8-4b00-9e27-7bd72dedcf3a" />
 
+
 The add-on talks to the local Sophos XML API and exposes a Home Assistant Ingress web UI with:
 
 - firewall/API connectivity status
@@ -16,23 +17,17 @@ The add-on talks to the local Sophos XML API and exposes a Home Assistant Ingres
 
 ## Add this repository to Home Assistant
 
-1. Push this repository to GitHub.
-2. In Home Assistant: **Settings → Add-ons → Add-on Store → ⋮ → Repositories**.
-3. Add the repository URL.
-4. Install **Sophos XG/SFOS Dashboard**.
+1. In Home Assistant: **Settings → Add-ons → Add-on Store → ⋮ → Repositories**.
+2. Add the repository URL.
+3. Install **Sophos XG/SFOS Dashboard**.
 
 ## Required Sophos setup
 
 On the Sophos firewall:
 
-1. Enable XML API access.
-2. Create/use a low-privilege API user if possible.
+1. Enable XML API access: **Backup & firmware → API → API configuration***
+2. Create/use a low-privilege API user if possible (Read-Only is enough).
 3. Allow API access only from the Home Assistant host IP/subnet.
-4. Use the firewall management URL, for example:
-
-```text
-https://192.0.2.10:4444
-```
 
 ## Add-on options
 
@@ -44,8 +39,6 @@ password: your-secret-password
 request_timeout: 30
 refresh_interval: 60
 ```
-
-No real credentials belong in this repository.
 
 ## API endpoints
 
