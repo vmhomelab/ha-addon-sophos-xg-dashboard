@@ -5,8 +5,9 @@ A Home Assistant add-on that displays Sophos Firewall / SFOS XML API information
 ## First supported views
 
 - connection/API status
-- firewall rules
-- NAT rules
+- Home Assistant style statistic cards for firewall/NAT totals, enabled/disabled rules, and logged firewall rules
+- breakdown panels for firewall actions, source zones, and NAT translation types
+- searchable firewall and NAT rule tables
 - raw counts and error diagnostics without exposing credentials
 
 ## Configuration

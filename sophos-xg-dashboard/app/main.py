@@ -6,7 +6,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.settings import load_settings
-from app.sophos_api import SophosClient, parse_firewall_rules, parse_nat_rules, sanitize_error
+from app.sophos_api import (
+    SophosClient,
+    build_dashboard_summary,
+    parse_firewall_rules,
+    parse_nat_rules,
+    sanitize_error,
+)
 
 app = FastAPI(title="Sophos XG/SFOS Dashboard", version="0.1.0")
 app.mount("/static", StaticFiles(directory="/app/app/static"), name="static")
@@ -63,7 +69,7 @@ async def nat_rules() -> JSONResponse:
 
 @app.get("/api/summary")
 async def summary() -> JSONResponse:
-    result: dict[str, object] = {"ok": True, "firewall_rules": None, "nat_rules": None, "errors": []}
+    result: dict[str, object] = {"ok": True, "firewall_rules": None, "nat_rules": None, "dashboard": None, "errors": []}
     try:
         fw_raw = await client().get_firewall_rules_raw()
         result["firewall_rules"] = parse_firewall_rules(fw_raw)
@@ -78,4 +84,8 @@ async def summary() -> JSONResponse:
         result["ok"] = False
         result["errors"].append({"source": "nat_rules", "error": sanitize_error(exc)})
 
+    result["dashboard"] = build_dashboard_summary(
+        result.get("firewall_rules") if isinstance(result.get("firewall_rules"), dict) else None,
+        result.get("nat_rules") if isinstance(result.get("nat_rules"), dict) else None,
+    )
     return JSONResponse(result, status_code=200 if result["ok"] else 502)

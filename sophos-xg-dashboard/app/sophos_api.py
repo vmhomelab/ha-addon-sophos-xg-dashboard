@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -147,6 +148,72 @@ def parse_nat_rules(xml_text: str) -> dict[str, Any]:
             }
         )
     return {"count": len(rules), "rules": rules}
+
+
+def _enabled_count(rules: list[dict[str, Any]], enabled: bool) -> int:
+    return sum(1 for rule in rules if rule.get("enabled") is enabled)
+
+
+def _breakdown(values: list[str | None]) -> dict[str, int]:
+    cleaned = [value for value in values if value]
+    return dict(Counter(cleaned).most_common())
+
+
+def _zone_breakdown(rules: list[dict[str, Any]], key: str) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for rule in rules:
+        for zone in rule.get(key) or []:
+            if zone:
+                counter[str(zone)] += 1
+    return dict(counter.most_common())
+
+
+def _nat_translation_type(rule: dict[str, Any]) -> str:
+    if rule.get("translated_destination"):
+        return "dnat"
+    if rule.get("translated_source"):
+        return "snat"
+    return "other"
+
+
+def build_dashboard_summary(
+    firewall_rules: dict[str, Any] | None,
+    nat_rules: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build UI-friendly counters and breakdowns for dashboard cards.
+
+    The XML API parser keeps the original rule rows mostly flat for tables. This
+    helper adds aggregate values that are stable for frontend cards and charts.
+    """
+    fw_rows = list((firewall_rules or {}).get("rules") or [])
+    nat_rows = list((nat_rules or {}).get("rules") or [])
+    fw_enabled = _enabled_count(fw_rows, True)
+    fw_disabled = _enabled_count(fw_rows, False)
+    nat_enabled = _enabled_count(nat_rows, True)
+    nat_disabled = _enabled_count(nat_rows, False)
+    nat_translation_counts = Counter(_nat_translation_type(rule) for rule in nat_rows)
+
+    return {
+        "cards": {
+            "firewall_total": len(fw_rows),
+            "firewall_enabled": fw_enabled,
+            "firewall_disabled": fw_disabled,
+            "nat_total": len(nat_rows),
+            "nat_enabled": nat_enabled,
+            "nat_disabled": nat_disabled,
+            "logged_firewall_rules": sum(
+                1 for rule in fw_rows if _enabled(str(rule.get("log_traffic") or "")) is True
+            ),
+        },
+        "firewall_action_breakdown": _breakdown([rule.get("action") for rule in fw_rows]),
+        "firewall_source_zone_breakdown": _zone_breakdown(fw_rows, "source_zones"),
+        "firewall_destination_zone_breakdown": _zone_breakdown(fw_rows, "destination_zones"),
+        "nat_translation_breakdown": {
+            "dnat": nat_translation_counts.get("dnat", 0),
+            "snat": nat_translation_counts.get("snat", 0),
+            "other": nat_translation_counts.get("other", 0),
+        },
+    }
 
 
 def sanitize_error(exc: Exception) -> str:

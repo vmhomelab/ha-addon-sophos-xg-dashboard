@@ -8,41 +8,109 @@
   </head>
   <body>
     <main>
-      <header>
+      <header class="page-header">
         <div>
           <p class="eyebrow">Home Assistant Add-on</p>
           <h1>Sophos XG/SFOS Dashboard</h1>
           <p class="muted">Target: <code>{{ sophos_host }}</code></p>
         </div>
-        <button id="refresh">Refresh</button>
+        <div class="header-actions">
+          <span class="pill" id="last-updated">Never refreshed</span>
+          <button id="refresh">Refresh</button>
+        </div>
       </header>
 
-      <section class="cards">
-        <article class="card">
+      <section class="status-strip ha-card">
+        <div>
           <span class="label">API status</span>
           <strong id="api-status">Loading</strong>
-        </article>
-        <article class="card">
+        </div>
+        <div>
+          <span class="label">Refresh interval</span>
+          <strong>{{ refresh_interval }}s</strong>
+        </div>
+      </section>
+
+      <section class="cards stats-grid" aria-label="Sophos rule statistics">
+        <article class="card ha-card accent-blue">
           <span class="label">Firewall rules</span>
           <strong id="fw-count">-</strong>
+          <small>Total policy rules returned by SFOS</small>
         </article>
-        <article class="card">
+        <article class="card ha-card accent-green">
+          <span class="label">Enabled firewall</span>
+          <strong id="fw-enabled-count">-</strong>
+          <small>Rules currently active</small>
+        </article>
+        <article class="card ha-card accent-red">
+          <span class="label">Disabled firewall</span>
+          <strong id="fw-disabled-count">-</strong>
+          <small>Rules present but not active</small>
+        </article>
+        <article class="card ha-card accent-cyan">
+          <span class="label">Logged firewall</span>
+          <strong id="logged-fw-count">-</strong>
+          <small>Rules with traffic logging enabled</small>
+        </article>
+        <article class="card ha-card accent-purple">
           <span class="label">NAT rules</span>
           <strong id="nat-count">-</strong>
+          <small>Total NAT rules returned by SFOS</small>
+        </article>
+        <article class="card ha-card accent-green">
+          <span class="label">Enabled NAT</span>
+          <strong id="nat-enabled-count">-</strong>
+          <small>Active translation rules</small>
         </article>
       </section>
 
-      <section class="panel">
-        <h2>Firewall rules</h2>
+      <section class="breakdown-grid">
+        <article class="panel ha-card">
+          <div class="panel-heading">
+            <h2>Firewall actions</h2>
+            <span class="muted">Accept, drop, reject…</span>
+          </div>
+          <div id="fw-action-breakdown" class="breakdown-list"></div>
+        </article>
+        <article class="panel ha-card">
+          <div class="panel-heading">
+            <h2>Source zones</h2>
+            <span class="muted">Rule source distribution</span>
+          </div>
+          <div id="fw-source-zone-breakdown" class="breakdown-list"></div>
+        </article>
+        <article class="panel ha-card">
+          <div class="panel-heading">
+            <h2>NAT translations</h2>
+            <span class="muted">DNAT / SNAT / other</span>
+          </div>
+          <div id="nat-translation-breakdown" class="breakdown-list"></div>
+        </article>
+      </section>
+
+      <section class="panel ha-card">
+        <div class="panel-heading table-heading">
+          <div>
+            <h2>Firewall rules</h2>
+            <span class="muted" id="fw-visible-count">No rows loaded</span>
+          </div>
+          <input id="fw-filter" type="search" placeholder="Filter firewall rules…" autocomplete="off" />
+        </div>
         <div class="table-wrap"><table id="fw-table"></table></div>
       </section>
 
-      <section class="panel">
-        <h2>NAT rules</h2>
+      <section class="panel ha-card">
+        <div class="panel-heading table-heading">
+          <div>
+            <h2>NAT rules</h2>
+            <span class="muted" id="nat-visible-count">No rows loaded</span>
+          </div>
+          <input id="nat-filter" type="search" placeholder="Filter NAT rules…" autocomplete="off" />
+        </div>
         <div class="table-wrap"><table id="nat-table"></table></div>
       </section>
 
-      <section class="panel error" id="errors" hidden>
+      <section class="panel error ha-card" id="errors" hidden>
         <h2>Diagnostics</h2>
         <pre id="error-output"></pre>
       </section>
@@ -50,16 +118,86 @@
 
     <script>
       const refreshMs = {{ refresh_interval }} * 1000;
+      const tableState = { 'fw-table': [], 'nat-table': [] };
 
-      function renderRules(tableId, rows, columns) {
-        const table = document.getElementById(tableId);
-        if (!rows || rows.length === 0) {
-          table.innerHTML = '<tr><td class="muted">No rules returned.</td></tr>';
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#039;');
+      }
+
+      function formatValue(value) {
+        if (Array.isArray(value)) return value.length ? value.map(escapeHtml).join(', ') : '<span class="muted">Any/none</span>';
+        if (typeof value === 'boolean') return `<span class="badge ${value ? 'ok' : 'off'}">${value ? 'Enabled' : 'Disabled'}</span>`;
+        return value === null || value === undefined || value === '' ? '<span class="muted">-</span>' : escapeHtml(value);
+      }
+
+      function setText(id, value) {
+        document.getElementById(id).textContent = value ?? '-';
+      }
+
+      function renderBreakdown(elementId, data) {
+        const element = document.getElementById(elementId);
+        const entries = Object.entries(data ?? {}).filter(([, value]) => Number(value) > 0);
+        const total = entries.reduce((sum, [, value]) => sum + Number(value), 0);
+        if (!entries.length) {
+          element.innerHTML = '<p class="muted empty">No data returned.</p>';
           return;
         }
-        table.innerHTML = `<thead><tr>${columns.map(c => `<th>${c.label}</th>`).join('')}</tr></thead>` +
-          `<tbody>${rows.map(row => `<tr>${columns.map(c => `<td>${Array.isArray(row[c.key]) ? row[c.key].join(', ') : (row[c.key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody>`;
+        element.innerHTML = entries.map(([label, value]) => {
+          const percent = total ? Math.round((Number(value) / total) * 100) : 0;
+          return `<div class="breakdown-row">
+            <div class="breakdown-top"><span>${escapeHtml(label)}</span><strong>${value}</strong></div>
+            <div class="meter"><span style="width: ${percent}%"></span></div>
+          </div>`;
+        }).join('');
       }
+
+      function renderRules(tableId, rows, columns) {
+        tableState[tableId] = rows ?? [];
+        filterTable(tableId, columns, '');
+      }
+
+      function filterTable(tableId, columns, query) {
+        const table = document.getElementById(tableId);
+        const rows = tableState[tableId] ?? [];
+        const normalized = query.trim().toLowerCase();
+        const visibleRows = normalized
+          ? rows.filter(row => JSON.stringify(row).toLowerCase().includes(normalized))
+          : rows;
+        const countId = tableId === 'fw-table' ? 'fw-visible-count' : 'nat-visible-count';
+        document.getElementById(countId).textContent = `${visibleRows.length} of ${rows.length} rows shown`;
+        if (!visibleRows.length) {
+          table.innerHTML = '<tr><td class="muted">No matching rules returned.</td></tr>';
+          return;
+        }
+        table.innerHTML = `<thead><tr>${columns.map(c => `<th>${escapeHtml(c.label)}</th>`).join('')}</tr></thead>` +
+          `<tbody>${visibleRows.map(row => `<tr>${columns.map(c => `<td>${formatValue(row[c.key])}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      }
+
+      const fwColumns = [
+        { key: 'position', label: '#' },
+        { key: 'name', label: 'Name' },
+        { key: 'enabled', label: 'State' },
+        { key: 'action', label: 'Action' },
+        { key: 'source_zones', label: 'Source zones' },
+        { key: 'destination_zones', label: 'Destination zones' },
+        { key: 'services', label: 'Services' },
+        { key: 'log_traffic', label: 'Logging' },
+      ];
+      const natColumns = [
+        { key: 'position', label: '#' },
+        { key: 'name', label: 'Name' },
+        { key: 'enabled', label: 'State' },
+        { key: 'original_source', label: 'Original source' },
+        { key: 'translated_source', label: 'Translated source' },
+        { key: 'original_destination', label: 'Original destination' },
+        { key: 'translated_destination', label: 'Translated destination' },
+        { key: 'services', label: 'Services' },
+      ];
 
       async function loadSummary() {
         const status = document.getElementById('api-status');
@@ -69,24 +207,23 @@
         try {
           const response = await fetch('./api/summary', { cache: 'no-store' });
           const data = await response.json();
+          const cards = data.dashboard?.cards ?? {};
           status.textContent = data.ok ? 'OK' : 'Error';
-          document.getElementById('fw-count').textContent = data.firewall_rules?.count ?? '-';
-          document.getElementById('nat-count').textContent = data.nat_rules?.count ?? '-';
-          renderRules('fw-table', data.firewall_rules?.rules ?? [], [
-            { key: 'name', label: 'Name' },
-            { key: 'enabled', label: 'Enabled' },
-            { key: 'action', label: 'Action' },
-            { key: 'source_zones', label: 'Source zones' },
-            { key: 'destination_zones', label: 'Destination zones' },
-            { key: 'services', label: 'Services' },
-          ]);
-          renderRules('nat-table', data.nat_rules?.rules ?? [], [
-            { key: 'name', label: 'Name' },
-            { key: 'enabled', label: 'Enabled' },
-            { key: 'original_source', label: 'Original source' },
-            { key: 'original_destination', label: 'Original destination' },
-            { key: 'translated_destination', label: 'Translated destination' },
-          ]);
+          status.className = data.ok ? 'status-ok' : 'status-error';
+          setText('fw-count', cards.firewall_total ?? data.firewall_rules?.count);
+          setText('fw-enabled-count', cards.firewall_enabled);
+          setText('fw-disabled-count', cards.firewall_disabled);
+          setText('logged-fw-count', cards.logged_firewall_rules);
+          setText('nat-count', cards.nat_total ?? data.nat_rules?.count);
+          setText('nat-enabled-count', cards.nat_enabled);
+          renderBreakdown('fw-action-breakdown', data.dashboard?.firewall_action_breakdown);
+          renderBreakdown('fw-source-zone-breakdown', data.dashboard?.firewall_source_zone_breakdown);
+          renderBreakdown('nat-translation-breakdown', data.dashboard?.nat_translation_breakdown);
+          renderRules('fw-table', data.firewall_rules?.rules ?? [], fwColumns);
+          renderRules('nat-table', data.nat_rules?.rules ?? [], natColumns);
+          document.getElementById('fw-filter').value = '';
+          document.getElementById('nat-filter').value = '';
+          document.getElementById('last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
           if (data.errors && data.errors.length) {
             errors.hidden = false;
             errorOutput.textContent = JSON.stringify(data.errors, null, 2);
@@ -96,12 +233,15 @@
           }
         } catch (err) {
           status.textContent = 'Error';
+          status.className = 'status-error';
           errors.hidden = false;
           errorOutput.textContent = String(err);
         }
       }
 
       document.getElementById('refresh').addEventListener('click', loadSummary);
+      document.getElementById('fw-filter').addEventListener('input', event => filterTable('fw-table', fwColumns, event.target.value));
+      document.getElementById('nat-filter').addEventListener('input', event => filterTable('nat-table', natColumns, event.target.value));
       loadSummary();
       setInterval(loadSummary, refreshMs);
     </script>
