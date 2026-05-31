@@ -1,7 +1,7 @@
 name: Sophos XG/SFOS Dashboard
 slug: sophos_xg_dashboard
 description: Home Assistant dashboard for Sophos XG/SFOS XML API stats, firewall rules, and NAT rules
-version: "0.1.0"
+version: "0.1.1"
 url: https://github.com/vmhomelab/ha-addon-sophos-xg-dashboard
 arch:
   - aarch64

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +16,7 @@ from app.sophos_api import (
     sanitize_error,
 )
 
+logger = logging.getLogger("sophos_xg_dashboard")
 app = FastAPI(title="Sophos XG/SFOS Dashboard", version="0.1.0")
 app.mount("/static", StaticFiles(directory="/app/app/static"), name="static")
 templates = Jinja2Templates(directory="/app/app/templates")
@@ -55,7 +58,9 @@ async def firewall_rules() -> JSONResponse:
         raw = await client().get_firewall_rules_raw()
         return JSONResponse({"ok": True, **parse_firewall_rules(raw)})
     except Exception as exc:  # noqa: BLE001 - API errors must be returned as diagnostics
-        return JSONResponse({"ok": False, "error": sanitize_error(exc)}, status_code=502)
+        error = sanitize_error(exc)
+        logger.warning("Sophos firewall rule request failed: %s", error)
+        return JSONResponse({"ok": False, "error": error}, status_code=502)
 
 
 @app.get("/api/nat-rules")
@@ -64,7 +69,9 @@ async def nat_rules() -> JSONResponse:
         raw = await client().get_nat_rules_raw()
         return JSONResponse({"ok": True, **parse_nat_rules(raw)})
     except Exception as exc:  # noqa: BLE001
-        return JSONResponse({"ok": False, "error": sanitize_error(exc)}, status_code=502)
+        error = sanitize_error(exc)
+        logger.warning("Sophos NAT rule request failed: %s", error)
+        return JSONResponse({"ok": False, "error": error}, status_code=502)
 
 
 @app.get("/api/summary")
@@ -74,18 +81,26 @@ async def summary() -> JSONResponse:
         fw_raw = await client().get_firewall_rules_raw()
         result["firewall_rules"] = parse_firewall_rules(fw_raw)
     except Exception as exc:  # noqa: BLE001
+        error = sanitize_error(exc)
         result["ok"] = False
-        result["errors"].append({"source": "firewall_rules", "error": sanitize_error(exc)})
+        result["errors"].append({"source": "firewall_rules", "error": error})
+        logger.warning("Sophos summary firewall rule request failed: %s", error)
 
     try:
         nat_raw = await client().get_nat_rules_raw()
         result["nat_rules"] = parse_nat_rules(nat_raw)
     except Exception as exc:  # noqa: BLE001
+        error = sanitize_error(exc)
         result["ok"] = False
-        result["errors"].append({"source": "nat_rules", "error": sanitize_error(exc)})
+        result["errors"].append({"source": "nat_rules", "error": error})
+        logger.warning("Sophos summary NAT rule request failed: %s", error)
 
     result["dashboard"] = build_dashboard_summary(
         result.get("firewall_rules") if isinstance(result.get("firewall_rules"), dict) else None,
         result.get("nat_rules") if isinstance(result.get("nat_rules"), dict) else None,
     )
-    return JSONResponse(result, status_code=200 if result["ok"] else 502)
+    # Keep the summary endpoint HTTP 200 even when SFOS returns an application
+    # error. Home Assistant Ingress can mask 502 response bodies, which hides
+    # the useful diagnostics from the dashboard UI. The `ok` flag carries the
+    # application status instead.
+    return JSONResponse(result, status_code=200)
